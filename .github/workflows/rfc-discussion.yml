@@ -42,6 +42,23 @@ jobs:
               .replace('[Full Rendered Proposal]()', `[Full Rendered Proposal](${renderedUrl})`)
               .replace('[Discussion Thread]()', `[Discussion Thread](${process.env.DISCUSSION_URL})`);
             
+            // Add labels
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['rfc']
+            });
+
+            // Lock PR comments
+            await github.rest.issues.lock({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              lock_reason: 'resolved'
+            });
+
+            // Update PR body
             await github.rest.pulls.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
