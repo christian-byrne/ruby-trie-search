@@ -1,0 +1,68 @@
+name: Create RFC Discussion
+
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - 'rfcs/**.md'  # Only trigger on markdown files in rfcs directory
+
+jobs:
+  create-discussion:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      discussions: write
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Get PR details
+        id: pr
+        run: |
+          echo "title=$(gh pr view ${{ github.event.pull_request.number }} --json title -q .title)" >> $GITHUB_OUTPUT
+          echo "body=$(gh pr view ${{ github.event.pull_request.number }} --json body -q .body)" >> $GITHUB_OUTPUT
+          echo "branch=$(gh pr view ${{ github.event.pull_request.number }} --json headRefName -q .headRefName)" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Discussion
+        id: discussion
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const discussion = await github.rest.discussions.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `RFC Discussion: ${process.env.PR_TITLE}`,
+              body: `This is the discussion thread for RFC PR #${context.issue.number}.\n\nPlease provide feedback and discuss the RFC here rather than in the PR comments.\n\nPR Link: ${context.payload.pull_request.html_url}`,
+              category_id: 'DIC_kwDONaExcs4Cl4XD'  // You'll need to replace this
+            });
+            return discussion.data.html_url;
+        env:
+          PR_TITLE: ${{ steps.pr.outputs.title }}
+
+      - name: Update PR description
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prBody = process.env.PR_BODY;
+            const renderedUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${process.env.PR_BRANCH}/rfcs/${context.payload.pull_request.title}.md`;
+            
+            const updatedBody = prBody
+              .replace('[Full Rendered Proposal]()', `[Full Rendered Proposal](${renderedUrl})`)
+              .replace('[Discussion Thread]()', `[Discussion Thread](${process.env.DISCUSSION_URL})`);
+            
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              body: updatedBody
+            });
+        env:
+          PR_BODY: ${{ steps.pr.outputs.body }}
+          PR_BRANCH: ${{ steps.pr.outputs.branch }}
+          DISCUSSION_URL: ${{ steps.discussion.outputs.result }}
