@@ -14,6 +14,23 @@ jobs:
       discussions: write
     
     steps:
+      - name: Get Changed Files
+        id: changed-files
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            
+            const mdFile = files.find(file => file.filename.startsWith('rfcs/') && file.filename.endsWith('.md'));
+            if (!mdFile) {
+              throw new Error('No markdown file found in rfcs directory');
+            }
+            core.setOutput('filename', mdFile.filename);
+
       - name: Create a new GitHub Discussion
         id: create-discussion
         uses: abirismyname/create-discussion@v1.x
@@ -36,7 +53,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const prBody = context.payload.pull_request.body;
-            const renderedUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${context.payload.pull_request.head.ref}/rfcs/${context.payload.pull_request.title}.md`;
+            const renderedUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${context.payload.pull_request.head.ref}/${process.env.MD_FILE}`;
             
             const updatedBody = prBody
               .replace('[Full Rendered Proposal]()', `[Full Rendered Proposal](${renderedUrl})`)
@@ -50,3 +67,4 @@ jobs:
             });
         env:
           DISCUSSION_URL: ${{ steps.create-discussion.outputs.discussion-url }}
+          MD_FILE: ${{ steps.changed-files.outputs.filename }}
